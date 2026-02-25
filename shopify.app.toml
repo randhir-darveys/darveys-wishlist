@@ -2,7 +2,7 @@
 
 client_id = "441ec3b7b7de3794db1258ed7f547b92"
 name = "wishlist"
-application_url = "https://makes-entered-alien-constant.trycloudflare.com"
+application_url = "https://your-production-domain.com"
 embedded = true
 
 [build]
@@ -29,4 +29,4 @@ subpath = "wishlist"
 prefix = "apps"
 
 [auth]
-redirect_urls = [ "https://makes-entered-alien-constant.trycloudflare.com/auth/callback" ]
+redirect_urls = [ "https://your-production-domain.com/auth/callback" ]
