@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "441ec3b7b7de3794db1258ed7f547b92"
+client_id = "eb868a4424b2ab4da34eb217496ff03d"
 name = "wishlist"
-application_url = "https://your-production-domain.com"
+application_url = "https://darveys-wishlist.onrender.com/"
 embedded = true
 
 [build]
@@ -29,4 +29,4 @@ subpath = "wishlist"
 prefix = "apps"
 
 [auth]
-redirect_urls = [ "https://your-production-domain.com/auth/callback" ]
+redirect_urls = [ "https://darveys-wishlist.onrender.com/auth/callback" ]
