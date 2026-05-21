@@ -1,236 +1,331 @@
-# Shopify App Template - React Router
+# Darveys Wishlist App
 
-This is a template for building a [Shopify app](https://shopify.dev/docs/apps/getting-started) using [React Router](https://reactrouter.com/). It was forked from the [Shopify Remix app template](https://github.com/Shopify/shopify-app-template-remix) and converted to React Router.
+Shopify Wishlist app for Darveys. The app is currently configured as a Shopify React Router app and is deployed on Render. This document explains the current architecture and the required steps to migrate the app from Render to AWS.
 
-Rather than cloning this repo, follow the [Quick Start steps](https://github.com/Shopify/shopify-app-template-react-router#quick-start).
+## Current Hosting
 
-Visit the [`shopify.dev` documentation](https://shopify.dev/docs/api/shopify-app-react-router) for more details on the React Router app package.
+- Current platform: Render
+- Current app URL: `https://darveys-wishlist.onrender.com/`
+- Target platform: AWS
+- Runtime: Node.js 20
+- App port: `3000`
+- Deployment mode: Docker
 
-## Upgrading from Remix
+## Application Overview
 
-If you have an existing Remix app that you want to upgrade to React Router, please follow the [upgrade guide](https://github.com/Shopify/shopify-app-template-react-router/wiki/Upgrading-from-Remix). Otherwise, please follow the quick start guide below.
+This app provides wishlist functionality through Shopify app proxy routes. Wishlist data is not stored in the application database. Instead, wishlist data is stored directly on the Shopify customer using customer metafields.
 
-## Quick start
+Wishlist metafield configuration:
 
-### Prerequisites
-
-Before you begin, you'll need to [download and install the Shopify CLI](https://shopify.dev/docs/apps/tools/cli/getting-started) if you haven't already.
-
-### Setup
-
-```shell
-shopify app init --template=https://github.com/Shopify/shopify-app-template-react-router
+```ts
+const WISHLIST_NAMESPACE = "custom";
+const WISHLIST_KEY = "wishlist";
+const WISHLIST_TYPE = "json";
 ```
 
-### Local Development
+The app reads and writes wishlist data through Shopify Admin GraphQL APIs. The app database is used only for Shopify app session storage.
 
-```shell
-shopify app dev
+## Tech Stack
+
+- Shopify React Router app
+- React 18
+- React Router 7
+- Shopify App Bridge
+- Shopify app session storage with Prisma
+- Prisma ORM
+- Docker
+
+## Important Data Note
+
+Wishlist data is stored in Shopify customer metafields, not in the app database.
+
+During hosting migration:
+
+- No wishlist data export is required.
+- No wishlist data import is required.
+- Existing customer wishlist data remains available in Shopify.
+- Only app hosting, Shopify configuration, secrets, and session storage need to be migrated.
+
+## Current Database Usage
+
+The app uses Prisma session storage:
+
+```ts
+sessionStorage: new PrismaSessionStorage(prisma)
 ```
 
-Press P to open the URL to your app. Once you click install, you can start development.
+The current Prisma schema uses SQLite:
 
-Local development is powered by [the Shopify CLI](https://shopify.dev/docs/apps/tools/cli). It logs into your account, connects to an app, provides environment variables, updates remote config, creates a tunnel and provides commands to generate extensions.
-
-### Authenticating and querying data
-
-To authenticate and query data you can use the `shopify` const that is exported from `/app/shopify.server.js`:
-
-```js
-export async function loader({ request }) {
-  const { admin } = await shopify.authenticate.admin(request);
-
-  const response = await admin.graphql(`
-    {
-      products(first: 25) {
-        nodes {
-          title
-          description
-        }
-      }
-    }`);
-
-  const {
-    data: {
-      products: { nodes },
-    },
-  } = await response.json();
-
-  return nodes;
+```prisma
+datasource db {
+  provider = "sqlite"
+  url      = "file:dev.sqlite"
 }
 ```
 
-This template comes pre-configured with examples of:
+The current database stores Shopify sessions only. It does not store wishlist records.
 
-1. Setting up your Shopify app in [/app/shopify.server.ts](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/shopify.server.ts)
-2. Querying data using Graphql. Please see: [/app/routes/app.\_index.tsx](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/routes/app._index.tsx).
-3. Responding to webhooks. Please see [/app/routes/webhooks.tsx](https://github.com/Shopify/shopify-app-template-react-router/blob/main/app/routes/webhooks.app.uninstalled.tsx).
+## Production Database Recommendation
 
-Please read the [documentation for @shopify/shopify-app-react-router](https://shopify.dev/docs/api/shopify-app-react-router) to see what other API's are available.
+SQLite should not be used inside AWS App Runner or ECS containers for production because the container filesystem is not durable across redeploys, restarts, or scaling.
 
-## Shopify Dev MCP
+Recommended production setup:
 
-This template is configured with the Shopify Dev MCP. This instructs [Cursor](https://cursor.com/), [GitHub Copilot](https://github.com/features/copilot) and [Claude Code](https://claude.com/product/claude-code) and [Google Gemini CLI](https://github.com/google-gemini/gemini-cli) to use the Shopify Dev MCP.
+- Use Amazon RDS PostgreSQL for Shopify session storage.
+- Update Prisma datasource to PostgreSQL.
 
-For more information on the Shopify Dev MCP please read [the documentation](https://shopify.dev/docs/apps/build/devmcp).
+Recommended Prisma datasource:
 
-## Deployment
-
-### Application Storage
-
-This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
-The database is defined as a Prisma schema in `prisma/schema.prisma`.
-
-This use of SQLite works in production if your app runs as a single instance.
-The database that works best for you depends on the data your app needs and how it is queried.
-Here’s a short list of databases providers that provide a free tier to get started:
-
-| Database   | Type             | Hosters                                                                                                                                                                                                                                    |
-| ---------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| MySQL      | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mysql), [Planet Scale](https://planetscale.com/), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/mysql) |
-| PostgreSQL | SQL              | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-postgresql), [Amazon Aurora](https://aws.amazon.com/rds/aurora/), [Google Cloud SQL](https://cloud.google.com/sql/docs/postgres)                                   |
-| Redis      | Key-value        | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-redis), [Amazon MemoryDB](https://aws.amazon.com/memorydb/)                                                                                                        |
-| MongoDB    | NoSQL / Document | [Digital Ocean](https://www.digitalocean.com/products/managed-databases-mongodb), [MongoDB Atlas](https://www.mongodb.com/atlas/database)                                                                                                  |
-
-To use one of these, you can use a different [datasource provider](https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#datasource) in your `schema.prisma` file, or a different [SessionStorage adapter package](https://github.com/Shopify/shopify-api-js/blob/main/packages/shopify-api/docs/guides/session-storage.md).
-
-### Build
-
-Build the app by running the command below with the package manager of your choice:
-
-Using yarn:
-
-```shell
-yarn build
+```prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 ```
 
-Using npm:
+## Recommended AWS Architecture
 
-```shell
+Use the following AWS services:
+
+- AWS App Runner for hosting the web app container
+- Amazon ECR for Docker images
+- Amazon RDS PostgreSQL for Shopify session storage
+- AWS Secrets Manager or SSM Parameter Store for secrets
+- Amazon CloudWatch Logs for logs and debugging
+- AWS Certificate Manager for SSL
+- Route 53 or existing DNS provider for domain routing
+
+App Runner is sufficient for the current app because the repo contains a single web service and no separate worker, queue, or cron process.
+
+## Required Environment Variables
+
+Configure these variables in AWS App Runner:
+
+```env
+NODE_ENV=production
+SHOPIFY_API_KEY=...
+SHOPIFY_API_SECRET=...
+SCOPES=read_customers,write_customers,read_products,write_products
+SHOPIFY_APP_URL=https://wishlist.yourdomain.com
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DB_NAME
+```
+
+Optional:
+
+```env
+SHOP_CUSTOM_DOMAIN=...
+```
+
+Use `SHOP_CUSTOM_DOMAIN` only if the app needs to support a specific custom Shopify shop domain.
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the Shopify development server:
+
+```bash
+npm run dev
+```
+
+Generate Prisma client and apply migrations:
+
+```bash
+npm run setup
+```
+
+Run type checks:
+
+```bash
+npm run typecheck
+```
+
+Run lint:
+
+```bash
+npm run lint
+```
+
+## Build
+
+Build the application:
+
+```bash
 npm run build
 ```
 
-Using pnpm:
+Start the production server:
 
-```shell
-pnpm run build
+```bash
+npm run start
 ```
 
-## Hosting
+Docker start command:
 
-When you're ready to set up your app in production, you can follow [our deployment documentation](https://shopify.dev/docs/apps/launch/deployment) to host it externally. From there, you have a few options:
-
-- [Google Cloud Run](https://shopify.dev/docs/apps/launch/deployment/deploy-to-google-cloud-run): This tutorial is written specifically for this example repo, and is compatible with the extended steps included in the subsequent [**Build your app**](tutorial) in the **Getting started** docs. It is the most detailed tutorial for taking a React Router-based Shopify app and deploying it to production. It includes configuring permissions and secrets, setting up a production database, and even hosting your apps behind a load balancer across multiple regions.
-- [Fly.io](https://fly.io/docs/js/shopify/): Leverages the Fly.io CLI to quickly launch Shopify apps to a single machine.
-- [Render](https://render.com/docs/deploy-shopify-app): This tutorial guides you through using Docker to deploy and install apps on a Dev store.
-- [Manual deployment guide](https://shopify.dev/docs/apps/launch/deployment/deploy-to-hosting-service): This resource provides general guidance on the requirements of deployment including environment variables, secrets, and persistent data.
-
-When you reach the step for [setting up environment variables](https://shopify.dev/docs/apps/deployment/web#set-env-vars), you also need to set the variable `NODE_ENV=production`.
-
-## Gotchas / Troubleshooting
-
-### Database tables don't exist
-
-If you get an error like:
-
-```
-The table `main.Session` does not exist in the current database.
+```bash
+npm run docker-start
 ```
 
-Create the database for Prisma. Run the `setup` script in `package.json` using `npm`, `yarn` or `pnpm`.
+`docker-start` runs:
 
-### Navigating/redirecting breaks an embedded app
-
-Embedded apps must maintain the user session, which can be tricky inside an iFrame. To avoid issues:
-
-1. Use `Link` from `react-router` or `@shopify/polaris`. Do not use `<a>`.
-2. Use `redirect` returned from `authenticate.admin`. Do not use `redirect` from `react-router`
-3. Use `useSubmit` from `react-router`.
-
-This only applies if your app is embedded, which it will be by default.
-
-### Webhooks: shop-specific webhook subscriptions aren't updated
-
-If you are registering webhooks in the `afterAuth` hook, using `shopify.registerWebhooks`, you may find that your subscriptions aren't being updated.
-
-Instead of using the `afterAuth` hook declare app-specific webhooks in the `shopify.app.toml` file. This approach is easier since Shopify will automatically sync changes every time you run `deploy` (e.g: `npm run deploy`). Please read these guides to understand more:
-
-1. [app-specific vs shop-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions)
-2. [Create a subscription tutorial](https://shopify.dev/docs/apps/build/webhooks/subscribe/get-started?deliveryMethod=https)
-
-If you do need shop-specific webhooks, keep in mind that the package calls `afterAuth` in 2 scenarios:
-
-- After installing the app
-- When an access token expires
-
-During normal development, the app won't need to re-authenticate most of the time, so shop-specific subscriptions aren't updated. To force your app to update the subscriptions, uninstall and reinstall the app. Revisiting the app will call the `afterAuth` hook.
-
-### Webhooks: Admin created webhook failing HMAC validation
-
-Webhooks subscriptions created in the [Shopify admin](https://help.shopify.com/en/manual/orders/notifications/webhooks) will fail HMAC validation. This is because the webhook payload is not signed with your app's secret key.
-
-The recommended solution is to use [app-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions) defined in your toml file instead. Test your webhooks by triggering events manually in the Shopify admin(e.g. Updating the product title to trigger a `PRODUCTS_UPDATE`).
-
-### Webhooks: Admin object undefined on webhook events triggered by the CLI
-
-When you trigger a webhook event using the Shopify CLI, the `admin` object will be `undefined`. This is because the CLI triggers an event with a valid, but non-existent, shop. The `admin` object is only available when the webhook is triggered by a shop that has installed the app. This is expected.
-
-Webhooks triggered by the CLI are intended for initial experimentation testing of your webhook configuration. For more information on how to test your webhooks, see the [Shopify CLI documentation](https://shopify.dev/docs/apps/tools/cli/commands#webhook-trigger).
-
-### Incorrect GraphQL Hints
-
-By default the [graphql.vscode-graphql](https://marketplace.visualstudio.com/items?itemName=GraphQL.vscode-graphql) extension for will assume that GraphQL queries or mutations are for the [Shopify Admin API](https://shopify.dev/docs/api/admin). This is a sensible default, but it may not be true if:
-
-1. You use another Shopify API such as the storefront API.
-2. You use a third party GraphQL API.
-
-If so, please update [.graphqlrc.ts](https://github.com/Shopify/shopify-app-template-react-router/blob/main/.graphqlrc.ts).
-
-### Using Defer & await for streaming responses
-
-By default the CLI uses a cloudflare tunnel. Unfortunately cloudflare tunnels wait for the Response stream to finish, then sends one chunk. This will not affect production.
-
-To test [streaming using await](https://reactrouter.com/api/components/Await#await) during local development we recommend [localhost based development](https://shopify.dev/docs/apps/build/cli-for-apps/networking-options#localhost-based-development).
-
-### "nbf" claim timestamp check failed
-
-This is because a JWT token is expired. If you are consistently getting this error, it could be that the clock on your machine is not in sync with the server. To fix this ensure you have enabled "Set time and date automatically" in the "Date and Time" settings on your computer.
-
-### Using MongoDB and Prisma
-
-If you choose to use MongoDB with Prisma, there are some gotchas in Prisma's MongoDB support to be aware of. Please see the [Prisma SessionStorage README](https://www.npmjs.com/package/@shopify/shopify-app-session-storage-prisma#mongodb).
-
-### Unable to require(`C:\...\query_engine-windows.dll.node`).
-
-Unable to require(`C:\...\query_engine-windows.dll.node`).
-The Prisma engines do not seem to be compatible with your system.
-
-query_engine-windows.dll.node is not a valid Win32 application.
-
-**Fix:** Set the environment variable:
-
-```shell
-PRISMA_CLIENT_ENGINE_TYPE=binary
+```bash
+npm run setup && npm run start
 ```
 
-This forces Prisma to use the binary engine mode, which runs the query engine as a separate process and can work via emulation on Windows ARM64.
+## Docker Deployment
 
-## Resources
+The repository includes a Dockerfile.
 
-React Router:
+The container exposes port:
 
-- [React Router docs](https://reactrouter.com/home)
+```dockerfile
+EXPOSE 3000
+```
 
-Shopify:
+The container command is:
 
-- [Intro to Shopify apps](https://shopify.dev/docs/apps/getting-started)
-- [Shopify App React Router docs](https://shopify.dev/docs/api/shopify-app-react-router)
-- [Shopify CLI](https://shopify.dev/docs/apps/tools/cli)
-- [Shopify App Bridge](https://shopify.dev/docs/api/app-bridge-library).
-- [Polaris Web Components](https://shopify.dev/docs/api/app-home/polaris-web-components).
-- [App extensions](https://shopify.dev/docs/apps/app-extensions/list)
-- [Shopify Functions](https://shopify.dev/docs/api/functions)
+```dockerfile
+CMD ["npm", "run", "docker-start"]
+```
 
-Internationalization:
+When deploying to AWS App Runner, configure the service port as `3000`.
 
-- [Internationalizing your app](https://shopify.dev/docs/apps/best-practices/internationalization/getting-started)
+## Shopify Configuration
+
+Current Shopify app config is in `shopify.app.toml`.
+
+Current Render URL:
+
+```toml
+application_url = "https://darveys-wishlist.onrender.com/"
+```
+
+For AWS, update it to the new domain:
+
+```toml
+application_url = "https://wishlist.yourdomain.com"
+```
+
+Update auth redirect URL:
+
+```toml
+[auth]
+redirect_urls = [ "https://wishlist.yourdomain.com/auth/callback" ]
+```
+
+The app proxy configuration should remain:
+
+```toml
+[app_proxy]
+url = "/proxy/wishlist"
+subpath = "wishlist"
+prefix = "apps"
+```
+
+Storefront URL:
+
+```text
+https://store-domain.com/apps/wishlist
+```
+
+Shopify proxies that request to:
+
+```text
+https://wishlist.yourdomain.com/proxy/wishlist
+```
+
+Existing webhook routes:
+
+```text
+/webhooks/app/uninstalled
+/webhooks/app/scopes_update
+```
+
+After updating `shopify.app.toml`, deploy the Shopify app configuration:
+
+```bash
+npm run deploy
+```
+
+## AWS Migration Steps
+
+1. Create an Amazon ECR repository.
+2. Create an Amazon RDS PostgreSQL database.
+3. Update Prisma provider from SQLite to PostgreSQL.
+4. Create and verify the Prisma migration for PostgreSQL.
+5. Set `DATABASE_URL` for RDS.
+6. Build the Docker image.
+7. Push the Docker image to ECR.
+8. Create an AWS App Runner service from the ECR image.
+9. Configure App Runner service port as `3000`.
+10. Add required environment variables and secrets.
+11. Connect App Runner to RDS using a VPC connector if RDS is private.
+12. Attach custom domain and SSL certificate.
+13. Update `SHOPIFY_APP_URL`.
+14. Update `shopify.app.toml` application URL and redirect URL.
+15. Run `npm run deploy` to sync Shopify configuration.
+16. Test the app on the AWS URL.
+17. Switch DNS from Render to AWS.
+18. Keep Render active during the rollback window.
+
+## Testing Checklist
+
+Before final cutover, verify:
+
+- AWS app URL opens successfully.
+- Embedded Shopify admin app loads inside Shopify admin.
+- OAuth install or re-auth flow works.
+- `/auth/callback` works.
+- Storefront app proxy `/apps/wishlist` works.
+- Logged-in customer can add a wishlist item.
+- Logged-in customer can remove a wishlist item.
+- Wishlist persists after page refresh.
+- Wishlist data appears in Shopify customer metafield.
+- App uninstall webhook works.
+- Scopes update webhook works.
+- CloudWatch logs are available.
+- No Prisma or session storage errors appear in logs.
+
+## Rollback Plan
+
+Keep the Render service running for at least 24 to 48 hours after AWS migration.
+
+Rollback steps:
+
+1. Point DNS back to Render.
+2. Revert Shopify `application_url` to:
+
+```toml
+application_url = "https://darveys-wishlist.onrender.com/"
+```
+
+3. Revert auth redirect URL to:
+
+```toml
+[auth]
+redirect_urls = [ "https://darveys-wishlist.onrender.com/auth/callback" ]
+```
+
+4. Deploy Shopify configuration:
+
+```bash
+npm run deploy
+```
+
+5. Confirm storefront `/apps/wishlist` works again.
+
+Wishlist data rollback is not required because wishlist data is stored in Shopify customer metafields.
+
+## DevOps Notes
+
+- Do not migrate wishlist records. There are no wishlist records in the app database.
+- Wishlist data is stored in Shopify customer metafields.
+- The app database is only for Shopify session storage.
+- Replace SQLite with RDS PostgreSQL before AWS production deployment.
+- App Runner is enough for the current application.
+- ECS Fargate should only be considered if future requirements include workers, queues, cron jobs, or advanced networking.
+- Keep Render active until AWS production is fully verified.
